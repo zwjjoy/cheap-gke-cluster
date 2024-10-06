@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-nginx-service
+  annotations:
+    cloud.google.com/neg: '{"exposed_ports": {"80":{"name": "ingressgateway"}}}'
+spec:
+  type: ClusterIP
+  selector:
+    app: nextjs
+  ports:
+    - port: 80
+      targetPort: 3000  # This is the container port
+      protocol: TCP
+      name: http

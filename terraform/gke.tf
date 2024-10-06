@@ -17,37 +17,37 @@ resource "google_compute_subnetwork" "default" {
   region        = var.region
   network       = google_compute_network.default.name
   ip_cidr_range = "10.0.0.0/24"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "google_container_cluster" "default" {
-  provider = google-beta
-  project  = var.project_id
-  name     = var.gke_cluster_name
-  location = var.zone
+  provider             = google-beta
+  project              = var.project_id
+  name                 = var.gke_cluster_name
+  location             = var.zone
+
   initial_node_count = var.num_nodes
   # More info on the VPC native cluster: https://cloud.google.com/kubernetes-engine/docs/how-to/standalone-neg#create_a-native_cluster
   networking_mode = "VPC_NATIVE"
   network    = google_compute_network.default.name
   subnetwork = google_compute_subnetwork.default.name
+  remove_default_node_pool = true
+
   # Disable the Google Cloud Logging service because you may overrun the Logging free tier allocation, and it may be expensive
   logging_service = "none"
+  monitoring_service = "monitoring.googleapis.com/kubernetes"
 
-  node_config {
-    # More info on Spot VMs with GKE https://cloud.google.com/kubernetes-engine/docs/how-to/spot-vms#create_a_cluster_with_enabled
-    spot = true
-    machine_type = var.machine_type
-    disk_size_gb = var.disk_size
-    tags = ["${var.gke_cluster_name}"]
-    oauth_scopes = [
-      "https://www.googleapis.com/auth/cloud-platform",
-      "https://www.googleapis.com/auth/trace.append",
-      "https://www.googleapis.com/auth/service.management.readonly",
-      "https://www.googleapis.com/auth/monitoring",
-      "https://www.googleapis.com/auth/devstorage.read_only",
-      "https://www.googleapis.com/auth/servicecontrol",
+  monitoring_config {
+    enable_components = [
+      "SYSTEM_COMPONENTS",    # Essential for core Kubernetes system monitoring
+      "CONTROLLER_MANAGER",   # Useful for monitoring node scaling and resource management
+      "POD"                   # Important for tracking pod-level metrics
     ]
   }
-  
+
   addons_config {
     http_load_balancing {
       # This needs to be enabled for the NEG to be automatically created for the ingress gateway svc
@@ -83,6 +83,44 @@ resource "google_container_cluster" "default" {
   }
 }
 
+resource "google_container_node_pool" "primary_nodes" {
+  provider = google-beta
+  cluster = google_container_cluster.default.name
+  name = "primary-node-pool"
+  location = var.zone
+  node_count = var.num_nodes
+
+  node_config {
+    # More info on Spot VMs with GKE https://cloud.google.com/kubernetes-engine/docs/how-to/spot-vms#create_a_cluster_with_enabled
+    spot = true
+    machine_type = var.machine_type
+    disk_size_gb = var.disk_size
+    disk_type    = "pd-standard"
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/cloud-platform",
+      "https://www.googleapis.com/auth/trace.append",
+      "https://www.googleapis.com/auth/service.management.readonly",
+      "https://www.googleapis.com/auth/monitoring",
+      "https://www.googleapis.com/auth/devstorage.read_only",
+      "https://www.googleapis.com/auth/servicecontrol",
+    ]
+    tags = [var.gke_cluster_name]
+  }
+
+  management {
+    # Disable auto-repair and auto-upgrade if desired to avoid unexpected instance recreation
+    auto_repair  = false
+    auto_upgrade = true
+  }
+
+  lifecycle {
+    ignore_changes = [ node_count ]
+  }
+
+  depends_on = [ google_container_cluster.default ]
+}
+
+
 resource "time_sleep" "wait_for_kube" {
   depends_on = [google_container_cluster.default]
   # GKE master endpoint may not be immediately accessible, resulting in error, waiting does the trick
@@ -93,6 +131,7 @@ resource "null_resource" "local_k8s_context" {
   depends_on = [time_sleep.wait_for_kube]
   provisioner "local-exec" {
     # Update your local gcloud and kubectl credentials for the newly created cluster
+    interpreter = ["bash", "-c"]
     command = "for i in 1 2 3 4 5; do gcloud container clusters get-credentials ${var.gke_cluster_name} --project=${var.project_id} --zone=${var.zone} && break || sleep 60; done"
   }
 }

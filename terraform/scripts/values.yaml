@@ -1,10 +1,14 @@
-gatewayProxies:
-  gatewayProxy:
-    service:
-      type: ClusterIP
-      extraAnnotations:
-        cloud.google.com/neg: '{"exposed_ports": {"80":{"name": "ingressgateway"}}}'
-    kind:
-      deployment:
-        replicas: 2
-    antiAffinity: true
+# controller:
+#   replicaCount: 2
+#   service:
+#     annotations:
+#       cloud.google.com/neg: '{"exposed_ports": {"80":{"name": "ingressgateway"}}'
+#   affinity:
+#     podAntiAffinity:
+#       requiredDuringSchedulingIgnoredDuringExecution:
+#         - labelSelector:
+#             matchExpressions:
+#               - key: app.kubernetes.io/instance
+#                 operator: In
+#                 values:
+#                   - nginx-ingress

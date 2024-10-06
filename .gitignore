@@ -17,3 +17,4 @@ credentials.json
 *.pfx
 
 terraform.tfvars
+terraform/plan.tfplan

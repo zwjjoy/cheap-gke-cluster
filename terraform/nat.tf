@@ -22,3 +22,13 @@ resource "google_compute_router_nat" "nat" {
   nat_ip_allocate_option             = "AUTO_ONLY"
   source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
 }
+
+# resource "null_resource" "destroy_nat" {
+#   provisioner "local-exec" {
+#     interpreter = ["bash", "-c"]
+#     command = "terraform destroy -auto-approve -target=google_compute_router_nat.nat"
+#   }
+
+#   # Ensure the NAT destroy action runs only after NAT is fully configured
+#   depends_on = [google_compute_router_nat.nat]
+# }
